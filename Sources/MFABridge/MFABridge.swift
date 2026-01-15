@@ -751,6 +751,51 @@ public func mfa_attention_forward(
   else {
     return 1 // MFA_ERROR_INVALID_ARGS
   }
+// ... existing imports and functions ...
+
+@_cdecl("mfa_is_device_supported")
+public func mfa_is_device_supported() -> Bool {
+  return MTLCreateSystemDefaultDevice() != nil
+}
+
+// ---------------------------------------------------------------------------
+// New: BF16 runtime support probe
+// ---------------------------------------------------------------------------
+
+@_cdecl("mfa_is_bfloat16_supported")
+public func mfa_is_bfloat16_supported() -> Bool {
+  // If no device, not supported
+  guard let device = MTLCreateSystemDefaultDevice() else {
+    return false
+  }
+
+  // Practical runtime probe: try to create a 1x1 texture with bfloat16 pixel format.
+  // If creation succeeds the device and driver expose BF16 support; otherwise assume no native support.
+  // Guard with availability because .bfloat16 symbol is only available on newer SDKs.
+
+  if #available(macOS 14.0, iOS 17.0, tvOS 17.0, *) {
+    let desc = MTLTextureDescriptor()
+    desc.pixelFormat = .bfloat16
+    desc.width = 1
+    desc.height = 1
+    desc.storageMode = .shared
+    desc.usage = .shaderRead
+
+    if let tex = device.makeTexture(descriptor: desc) {
+      // We were able to create a BF16 texture -> BF16 supported
+      // Release the texture and return true
+      _ = tex
+      return true
+    } else {
+      // Creation failed -> likely no BF16 support
+      return false
+    }
+  } else {
+    // Running on older SDK where .bfloat16 may not be available; conservatively assume not supported
+    return false
+  }
+}
+
 
   // Extract context and buffers
   let mfaContext = Unmanaged<MFAContext>.fromOpaque(context).takeUnretainedValue()
